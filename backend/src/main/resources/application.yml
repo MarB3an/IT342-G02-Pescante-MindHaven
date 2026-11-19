@@ -1,0 +1,41 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: mindhaven-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://db.vxinubzpzhjhgiogolbe.supabase.co:5432/postgres?sslmode=require}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 15000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        default_schema: ${DB_SCHEMA:mindhaven}
+        hbm2ddl:
+          create_namespaces: true
+        format_sql: false
+
+mindhaven:
+  security:
+    jwt-secret: ${JWT_SECRET:dev-only-replace-with-256-bit-base64-secret-key-mindhaven-2026!}
+    access-token-ttl-minutes: ${JWT_ACCESS_TTL_MIN:15}
+    refresh-token-ttl-days: ${JWT_REFRESH_TTL_DAYS:7}
+    email-hash-pepper: ${EMAIL_HASH_PEPPER:dev-only-replace-with-32-byte-email-pepper-mindhaven-2026!}
+    cookie-secure: ${COOKIE_SECURE:false}
+    max-failed-attempts: 5
+    lockout-minutes: 15
+    allowed-email-domains: ${ALLOWED_EMAIL_DOMAINS:cit.edu,edu,edu.ph}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  bootstrap:
+    admin-email: ${ADMIN_EMAIL:}
+    admin-password: ${ADMIN_PASSWORD:}
+    admin-full-name: ${ADMIN_FULL_NAME:System Administrator}
