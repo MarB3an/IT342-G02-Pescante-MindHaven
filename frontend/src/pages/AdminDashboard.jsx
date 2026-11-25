@@ -3,7 +3,9 @@ import { dashboardApi } from '../api/dashboardApi';
 import { extractErrorMessage, extractFieldErrors } from '../api/axiosClient';
 import { isStrongPassword, isValidEmail } from '../utils/validators';
 import AppLayout from '../components/AppLayout';
+import ChangePasswordCard from '../components/ChangePasswordCard';
 import FormInput from '../components/FormInput';
+import StaffProfileCard from '../components/StaffProfileCard';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('staff');
@@ -142,6 +144,7 @@ export default function AdminDashboard() {
     { id: 'staff', label: 'Staff & Counselors', badge: data?.staffUsers?.length ?? 0 },
     { id: 'rooms', label: 'Topic Rooms', badge: data?.topicRooms?.length ?? 0 },
     { id: 'audit', label: 'Audit Logs', badge: data?.auditLogs?.length ?? 0 },
+    { id: 'profile', label: 'Profile & Security' },
   ];
 
   return (
@@ -472,6 +475,13 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'profile' && (
+            <div className="two-col">
+              <StaffProfileCard onProfileUpdated={() => loadDashboard()} />
+              <ChangePasswordCard />
             </div>
           )}
         </>

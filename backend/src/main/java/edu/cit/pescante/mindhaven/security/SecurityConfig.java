@@ -54,9 +54,13 @@ public class SecurityConfig {
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/refresh",
-                                "/api/v1/auth/logout"
+                                "/api/v1/auth/logout",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
+                                "/api/v1/auth/reset-password/validate"
                         ).permitAll()
-                        .requestMatchers("/api/v1/auth/me").authenticated()
+                        .requestMatchers("/api/v1/auth/me", "/api/v1/auth/change-password").authenticated()
+                        .requestMatchers("/api/v1/profile/**").authenticated()
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
                         .requestMatchers("/api/v1/counselor/**").hasRole("COUNSELOR")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

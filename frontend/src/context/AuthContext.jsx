@@ -67,6 +67,17 @@ export function AuthProvider({ children }) {
     }
   }, [clearSession]);
 
+  const changePassword = useCallback(async (payload) => {
+    const data = await authApi.changePassword(payload);
+    if (data?.accessToken) {
+      setAccessToken(data.accessToken);
+    }
+    if (data?.user) {
+      setUser(data.user);
+    }
+    return data;
+  }, []);
+
   const updateUserState = useCallback((updatedUser) => {
     setUser(updatedUser);
   }, []);
@@ -78,6 +89,7 @@ export function AuthProvider({ children }) {
     register,
     login,
     logout,
+    changePassword,
     updateUserState,
   };
 

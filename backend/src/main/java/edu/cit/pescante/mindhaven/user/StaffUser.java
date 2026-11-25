@@ -36,6 +36,9 @@ public class StaffUser {
     @Column(name = "mobile_number", length = 32)
     private String mobileNumber;
 
+    @Column(name = "bio", length = 200)
+    private String bio;
+
     @Column(name = "is_on_call", nullable = false)
     private boolean onCall = false;
 
@@ -117,6 +120,14 @@ public class StaffUser {
 
     public void setMobileNumber(String mobileNumber) {
         this.mobileNumber = mobileNumber;
+    }
+
+    public String getBio() {
+        return bio;
+    }
+
+    public void setBio(String bio) {
+        this.bio = bio;
     }
 
     public boolean isOnCall() {

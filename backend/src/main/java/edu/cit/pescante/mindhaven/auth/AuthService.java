@@ -7,6 +7,8 @@ import edu.cit.pescante.mindhaven.security.EmailHashService;
 import edu.cit.pescante.mindhaven.security.JwtService;
 import edu.cit.pescante.mindhaven.user.AuditLogService;
 import edu.cit.pescante.mindhaven.user.OwnerType;
+import edu.cit.pescante.mindhaven.user.PasswordResetToken;
+import edu.cit.pescante.mindhaven.user.PasswordResetTokenRepository;
 import edu.cit.pescante.mindhaven.user.PseudonymGenerator;
 import edu.cit.pescante.mindhaven.user.RefreshToken;
 import edu.cit.pescante.mindhaven.user.RefreshTokenRepository;
@@ -17,6 +19,8 @@ import edu.cit.pescante.mindhaven.user.StudentAccount;
 import edu.cit.pescante.mindhaven.user.StudentAccountRepository;
 import edu.cit.pescante.mindhaven.user.StudentProfile;
 import edu.cit.pescante.mindhaven.user.StudentProfileRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,11 +28,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     public record AuthSessionResult(AuthResponse response, String rawRefreshToken) {
     }
@@ -37,6 +46,7 @@ public class AuthService {
     private final StudentProfileRepository studentProfileRepository;
     private final StaffUserRepository staffUserRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailHashService emailHashService;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
@@ -49,6 +59,7 @@ public class AuthService {
             StudentProfileRepository studentProfileRepository,
             StaffUserRepository staffUserRepository,
             RefreshTokenRepository refreshTokenRepository,
+            PasswordResetTokenRepository passwordResetTokenRepository,
             EmailHashService emailHashService,
             JwtService jwtService,
             PasswordEncoder passwordEncoder,
@@ -60,6 +71,7 @@ public class AuthService {
         this.studentProfileRepository = studentProfileRepository;
         this.staffUserRepository = staffUserRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailHashService = emailHashService;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
@@ -314,6 +326,194 @@ public class AuthService {
         }
     }
 
+    @Transactional
+    public ForgotPasswordResponse requestPasswordReset(ForgotPasswordRequest request) {
+        String normalizedEmail = emailHashService.normalizeEmail(request.email());
+        long ttlMinutes = appProperties.getSecurity().getPasswordResetTtlMinutes();
+        String genericMessage = "If an active account exists for that email, a secure password reset link has been generated (expires in " + ttlMinutes + " minutes).";
+
+        Optional<StaffUser> staffOpt = staffUserRepository.findByEmailIgnoreCase(normalizedEmail)
+                .filter(StaffUser::isActive);
+        if (staffOpt.isPresent()) {
+            StaffUser staff = staffOpt.get();
+            String rawToken = createAndStorePasswordResetToken(OwnerType.STAFF, staff.getStaffId(), ttlMinutes);
+            auditLogService.record(staff.getRole().name(), staff.getFullName(), "PASSWORD_RESET_REQUESTED", "Single-use password reset token generated.");
+            log.info("Password reset token generated for staff {} -> /reset-password?token={}", staff.getEmail(), rawToken);
+            return buildForgotPasswordResponse(genericMessage, ttlMinutes, rawToken);
+        }
+
+        String emailHash = emailHashService.hmacEmail(normalizedEmail);
+        Optional<StudentAccount> studentOpt = studentAccountRepository.findByEmailHash(emailHash)
+                .filter(StudentAccount::isActive);
+        if (studentOpt.isPresent()) {
+            StudentAccount account = studentOpt.get();
+            String rawToken = createAndStorePasswordResetToken(OwnerType.STUDENT, account.getAccountId(), ttlMinutes);
+            String handle = studentProfileRepository.findByAccountAccountId(account.getAccountId())
+                    .map(StudentProfile::getPseudonymHandle)
+                    .orElse("AnonymousStudent");
+            auditLogService.record(Role.ROLE_STUDENT.name(), handle, "PASSWORD_RESET_REQUESTED", "Single-use password reset token generated.");
+            log.info("Password reset token generated for student {} -> /reset-password?token={}", handle, rawToken);
+            return buildForgotPasswordResponse(genericMessage, ttlMinutes, rawToken);
+        }
+
+        return new ForgotPasswordResponse(genericMessage, ttlMinutes, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> validatePasswordResetToken(String rawToken) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (rawToken == null || rawToken.isBlank()) {
+            result.put("valid", false);
+            result.put("message", "Reset token is missing.");
+            return result;
+        }
+        String tokenHash = emailHashService.sha256Hex(rawToken.trim());
+        Optional<PasswordResetToken> tokenOpt = passwordResetTokenRepository.findByTokenHash(tokenHash);
+        if (tokenOpt.isEmpty()) {
+            result.put("valid", false);
+            result.put("message", "Invalid password reset link or token.");
+            return result;
+        }
+        PasswordResetToken token = tokenOpt.get();
+        if (token.isUsed()) {
+            result.put("valid", false);
+            result.put("message", "This password reset token has already been used.");
+            return result;
+        }
+        if (token.isExpired()) {
+            result.put("valid", false);
+            result.put("message", "This password reset token has expired. Please request a new one.");
+            return result;
+        }
+        result.put("valid", true);
+        result.put("expiresAt", token.getExpiresAt());
+        result.put("message", "Token is valid.");
+        return result;
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "New password and confirm password do not match.");
+        }
+
+        String tokenHash = emailHashService.sha256Hex(request.token().trim());
+        PasswordResetToken stored = passwordResetTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Invalid or expired password reset token."));
+
+        if (stored.isUsed()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "This password reset token has already been used.");
+        }
+        if (stored.isExpired()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "This password reset token has expired. Please request a new one.");
+        }
+
+        String encodedPassword = passwordEncoder.encode(request.newPassword());
+
+        if (stored.getOwnerType() == OwnerType.STUDENT) {
+            StudentAccount account = studentAccountRepository.findById(stored.getOwnerId())
+                    .filter(StudentAccount::isActive)
+                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Associated student account is no longer active."));
+            account.setPasswordHash(encodedPassword);
+            account.setFailedAttempts(0);
+            account.setLockedUntil(null);
+            studentAccountRepository.save(account);
+
+            refreshTokenRepository.revokeAllActiveByOwner(OwnerType.STUDENT, account.getAccountId());
+
+            String handle = studentProfileRepository.findByAccountAccountId(account.getAccountId())
+                    .map(StudentProfile::getPseudonymHandle)
+                    .orElse("AnonymousStudent");
+            auditLogService.record(Role.ROLE_STUDENT.name(), handle, "PASSWORD_RESET_COMPLETED", "Student password reset using single-use token; active sessions revoked.");
+        } else {
+            StaffUser staff = staffUserRepository.findById(stored.getOwnerId())
+                    .filter(StaffUser::isActive)
+                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Associated staff account is no longer active."));
+            staff.setPasswordHash(encodedPassword);
+            staff.setFailedAttempts(0);
+            staff.setLockedUntil(null);
+            staffUserRepository.save(staff);
+
+            refreshTokenRepository.revokeAllActiveByOwner(OwnerType.STAFF, staff.getStaffId());
+            auditLogService.record(staff.getRole().name(), staff.getFullName(), "PASSWORD_RESET_COMPLETED", "Staff password reset using single-use token; active sessions revoked.");
+        }
+
+        stored.setUsed(true);
+        stored.setUsedAt(Instant.now());
+        passwordResetTokenRepository.save(stored);
+    }
+
+    @Transactional
+    public AuthSessionResult changePassword(AuthenticatedUser currentUser, ChangePasswordRequest request) {
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "New password and confirm password do not match.");
+        }
+        if (request.currentPassword().equals(request.newPassword())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "New password must be different from your current password.");
+        }
+
+        if (currentUser.ownerType() == OwnerType.STUDENT) {
+            StudentAccount account = studentAccountRepository.findById(currentUser.accountId())
+                    .filter(StudentAccount::isActive)
+                    .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Student account is no longer active."));
+
+            if (!passwordEncoder.matches(request.currentPassword(), account.getPasswordHash())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
+            }
+
+            account.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+            account.setFailedAttempts(0);
+            account.setLockedUntil(null);
+            studentAccountRepository.save(account);
+
+            refreshTokenRepository.revokeAllActiveByOwner(OwnerType.STUDENT, account.getAccountId());
+
+            StudentProfile profile = studentProfileRepository.findById(currentUser.id())
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Student profile not found."));
+            auditLogService.record(Role.ROLE_STUDENT.name(), profile.getPseudonymHandle(), "PASSWORD_CHANGED", "Student changed password; previous sessions revoked.");
+            return issueStudentSession(account, profile);
+        } else {
+            StaffUser staff = staffUserRepository.findById(currentUser.id())
+                    .filter(StaffUser::isActive)
+                    .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Staff account is no longer active."));
+
+            if (!passwordEncoder.matches(request.currentPassword(), staff.getPasswordHash())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
+            }
+
+            staff.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+            staff.setFailedAttempts(0);
+            staff.setLockedUntil(null);
+            staffUserRepository.save(staff);
+
+            refreshTokenRepository.revokeAllActiveByOwner(OwnerType.STAFF, staff.getStaffId());
+            auditLogService.record(staff.getRole().name(), staff.getFullName(), "PASSWORD_CHANGED", "Staff user changed password; previous sessions revoked.");
+            return issueStaffSession(staff);
+        }
+    }
+
+    private String createAndStorePasswordResetToken(OwnerType ownerType, UUID ownerId, long ttlMinutes) {
+        Instant now = Instant.now();
+        passwordResetTokenRepository.invalidateAllActiveByOwner(ownerType, ownerId, now);
+
+        String rawToken = emailHashService.generateOpaqueToken();
+        PasswordResetToken entity = new PasswordResetToken();
+        entity.setTokenHash(emailHashService.sha256Hex(rawToken));
+        entity.setOwnerType(ownerType);
+        entity.setOwnerId(ownerId);
+        entity.setExpiresAt(now.plus(ttlMinutes, ChronoUnit.MINUTES));
+        entity.setUsed(false);
+        passwordResetTokenRepository.save(entity);
+        return rawToken;
+    }
+
+    private ForgotPasswordResponse buildForgotPasswordResponse(String message, long ttlMinutes, String rawToken) {
+        if (appProperties.getSecurity().isExposeResetTokenInResponse()) {
+            return new ForgotPasswordResponse(message, ttlMinutes, rawToken, "/reset-password?token=" + rawToken);
+        }
+        return new ForgotPasswordResponse(message, ttlMinutes, null, null);
+    }
+
     public static UserInfoResponse toStudentUserInfo(StudentProfile profile) {
         return new UserInfoResponse(
                 profile.getPseudonymId(),
@@ -324,6 +524,7 @@ public class AuthService {
                 null,
                 null,
                 null,
+                profile.getBio(),
                 profile.getCreatedAt()
         );
     }
@@ -338,6 +539,7 @@ public class AuthService {
                 staff.getEmail(),
                 staff.getMobileNumber(),
                 staff.isOnCall(),
+                staff.getBio(),
                 staff.getCreatedAt()
         );
     }
