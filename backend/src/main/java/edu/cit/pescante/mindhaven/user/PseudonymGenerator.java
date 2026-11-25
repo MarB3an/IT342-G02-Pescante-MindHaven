@@ -75,4 +75,18 @@ public class PseudonymGenerator {
         }
         return null;
     }
+
+    public String validateBio(String rawBio) {
+        if (rawBio == null || rawBio.isBlank()) {
+            return null;
+        }
+        String trimmed = rawBio.trim();
+        if (trimmed.length() > 200) {
+            return "Bio must not exceed 200 characters.";
+        }
+        if (PII_PATTERN.matcher(trimmed).matches()) {
+            return "Bio cannot contain email addresses or long numeric IDs to protect your anonymity.";
+        }
+        return null;
+    }
 }

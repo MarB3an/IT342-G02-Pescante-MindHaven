@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
@@ -80,6 +81,39 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<UserInfoResponse> me(@AuthenticationPrincipal AuthenticatedUser currentUser) {
         return ResponseEntity.ok(authService.getCurrentUser(currentUser));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ForgotPasswordResponse> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request
+    ) {
+        return ResponseEntity.ok(authService.requestPasswordReset(request));
+    }
+
+    @GetMapping("/reset-password/validate")
+    public ResponseEntity<Map<String, Object>> validateResetToken(@RequestParam String token) {
+        return ResponseEntity.ok(authService.validatePasswordResetToken(token));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request
+    ) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(Map.of(
+                "message", "Your password has been reset successfully. You can now sign in with your new password."
+        ));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<AuthResponse> changePassword(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @Valid @RequestBody ChangePasswordRequest request,
+            HttpServletResponse response
+    ) {
+        AuthService.AuthSessionResult session = authService.changePassword(currentUser, request);
+        addRefreshCookie(response, session.rawRefreshToken());
+        return ResponseEntity.ok(session.response());
     }
 
     private void addRefreshCookie(HttpServletResponse response, String tokenValue) {

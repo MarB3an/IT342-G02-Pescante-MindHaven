@@ -15,6 +15,7 @@ public record UserInfoResponse(
         String email,
         String mobileNumber,
         Boolean onCall,
+        String bio,
         Instant createdAt
 ) {
 }

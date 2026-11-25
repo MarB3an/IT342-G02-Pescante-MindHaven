@@ -5,6 +5,8 @@ import ProtectedRoute from './ProtectedRoute';
 import RoleRoute from './RoleRoute';
 import LoginPage from '../features/auth/LoginPage';
 import RegisterPage from '../features/auth/RegisterPage';
+import ForgotPasswordPage from '../features/auth/ForgotPasswordPage';
+import ResetPasswordPage from '../features/auth/ResetPasswordPage';
 import StudentDashboard from '../pages/StudentDashboard';
 import CounselorDashboard from '../pages/CounselorDashboard';
 import AdminDashboard from '../pages/AdminDashboard';
@@ -58,6 +60,15 @@ export default function AppRouter() {
           </GuestOnly>
         }
       />
+      <Route
+        path="/forgot-password"
+        element={
+          <GuestOnly>
+            <ForgotPasswordPage />
+          </GuestOnly>
+        }
+      />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
