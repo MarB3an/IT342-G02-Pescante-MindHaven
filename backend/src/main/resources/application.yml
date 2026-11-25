@@ -32,6 +32,8 @@ mindhaven:
     cookie-secure: ${COOKIE_SECURE:false}
     max-failed-attempts: 5
     lockout-minutes: 15
+    password-reset-ttl-minutes: ${PASSWORD_RESET_TTL_MIN:15}
+    expose-reset-token-in-response: ${EXPOSE_RESET_TOKEN_IN_RESPONSE:true}
     allowed-email-domains: ${ALLOWED_EMAIL_DOMAINS:cit.edu,edu,edu.ph}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

@@ -44,6 +44,8 @@ public class AppProperties {
         private boolean cookieSecure = false;
         private int maxFailedAttempts = 5;
         private long lockoutMinutes = 15;
+        private long passwordResetTtlMinutes = 15;
+        private boolean exposeResetTokenInResponse = true;
         private String allowedEmailDomains = "cit.edu,edu,edu.ph";
 
         public String getJwtSecret() {
@@ -100,6 +102,22 @@ public class AppProperties {
 
         public void setLockoutMinutes(long lockoutMinutes) {
             this.lockoutMinutes = lockoutMinutes;
+        }
+
+        public long getPasswordResetTtlMinutes() {
+            return passwordResetTtlMinutes;
+        }
+
+        public void setPasswordResetTtlMinutes(long passwordResetTtlMinutes) {
+            this.passwordResetTtlMinutes = passwordResetTtlMinutes;
+        }
+
+        public boolean isExposeResetTokenInResponse() {
+            return exposeResetTokenInResponse;
+        }
+
+        public void setExposeResetTokenInResponse(boolean exposeResetTokenInResponse) {
+            this.exposeResetTokenInResponse = exposeResetTokenInResponse;
         }
 
         public String getAllowedEmailDomains() {

@@ -30,6 +30,9 @@ public class StudentProfile {
     @Column(name = "avatar_code", nullable = false, length = 40)
     private String avatarCode = "sparrow";
 
+    @Column(name = "bio", length = 200)
+    private String bio;
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
@@ -83,6 +86,14 @@ public class StudentProfile {
 
     public void setAvatarCode(String avatarCode) {
         this.avatarCode = avatarCode;
+    }
+
+    public String getBio() {
+        return bio;
+    }
+
+    public void setBio(String bio) {
+        this.bio = bio;
     }
 
     public boolean isActive() {
