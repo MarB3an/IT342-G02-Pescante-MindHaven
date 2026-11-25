@@ -112,6 +112,10 @@ export default function LoginPage() {
               error={fieldErrors.password}
             />
 
+            <div style={{ textAlign: 'right', marginTop: '-0.5rem', marginBottom: '1rem', fontSize: '0.86rem' }}>
+              <Link to="/forgot-password">Forgot password?</Link>
+            </div>
+
             <button type="submit" className="btn btn-primary btn-full" disabled={submitting}>
               {submitting ? 'Signing in...' : 'Sign In'}
             </button>

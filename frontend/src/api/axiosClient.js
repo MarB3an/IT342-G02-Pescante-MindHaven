@@ -44,7 +44,9 @@ axiosClient.interceptors.response.use(
       url.includes('/auth/login') ||
       url.includes('/auth/register') ||
       url.includes('/auth/refresh') ||
-      url.includes('/auth/logout');
+      url.includes('/auth/logout') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/reset-password');
 
     if (status === 401 && !originalRequest._retry && !isAuthLifecycleEndpoint) {
       originalRequest._retry = true;

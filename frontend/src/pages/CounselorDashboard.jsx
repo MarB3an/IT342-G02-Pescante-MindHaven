@@ -3,7 +3,9 @@ import { dashboardApi } from '../api/dashboardApi';
 import { extractErrorMessage } from '../api/axiosClient';
 import { useAuth } from '../hooks/useAuth';
 import AppLayout from '../components/AppLayout';
+import ChangePasswordCard from '../components/ChangePasswordCard';
 import FormInput from '../components/FormInput';
+import StaffProfileCard from '../components/StaffProfileCard';
 
 export default function CounselorDashboard() {
   const { updateUserState } = useAuth();
@@ -71,6 +73,7 @@ export default function CounselorDashboard() {
     { id: 'overview', label: 'Triage Overview' },
     { id: 'availability', label: 'On-Call Roster' },
     { id: 'rooms', label: 'Monitored Rooms', badge: data?.topicRooms?.length ?? 0 },
+    { id: 'profile', label: 'Profile & Security' },
   ];
 
   return (
@@ -184,6 +187,13 @@ export default function CounselorDashboard() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {!loading && data && activeTab === 'profile' && (
+        <div className="two-col">
+          <StaffProfileCard onProfileUpdated={() => loadDashboard()} />
+          <ChangePasswordCard />
         </div>
       )}
     </AppLayout>

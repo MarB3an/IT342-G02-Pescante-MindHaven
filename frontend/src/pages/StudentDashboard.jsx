@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { authApi } from '../api/authApi';
 import { dashboardApi } from '../api/dashboardApi';
 import { extractErrorMessage } from '../api/axiosClient';
 import { useAuth } from '../hooks/useAuth';
 import { AVATAR_META } from '../utils/validators';
 import AppLayout from '../components/AppLayout';
 import CalmToolkitPreview from '../components/CalmToolkitPreview';
+import ChangePasswordCard from '../components/ChangePasswordCard';
 import FormInput from '../components/FormInput';
 
 export default function StudentDashboard() {
@@ -17,6 +19,7 @@ export default function StudentDashboard() {
 
   const [pseudonymInput, setPseudonymInput] = useState('');
   const [avatarInput, setAvatarInput] = useState('sparrow');
+  const [bioInput, setBioInput] = useState('');
   const [profileStatus, setProfileStatus] = useState({ type: '', text: '' });
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -28,6 +31,7 @@ export default function StudentDashboard() {
       setData(res);
       setPseudonymInput(res.profile.displayName || '');
       setAvatarInput(res.profile.avatarCode || 'sparrow');
+      setBioInput(res.profile.bio || '');
       updateUserState(res.profile);
     } catch (err) {
       setError(extractErrorMessage(err, 'Failed to load student dashboard.'));
@@ -45,9 +49,10 @@ export default function StudentDashboard() {
     setProfileStatus({ type: '', text: '' });
     setSavingProfile(true);
     try {
-      const updated = await dashboardApi.updateStudentProfile({
+      const updated = await authApi.updateProfile({
         pseudonymHandle: pseudonymInput.trim(),
         avatarCode: avatarInput,
+        bio: bioInput.trim(),
       });
       setData((prev) => ({ ...prev, profile: updated }));
       updateUserState(updated);
@@ -77,7 +82,7 @@ export default function StudentDashboard() {
 
   const navItems = [
     { id: 'overview', label: 'Overview' },
-    { id: 'profile', label: 'Pseudonymous Profile' },
+    { id: 'profile', label: 'Profile & Security' },
     { id: 'rooms', label: 'Topic Rooms', badge: data?.activeTopicRooms?.length ?? 0 },
     { id: 'toolkit', label: 'Calm Toolkit' },
   ];
@@ -146,60 +151,80 @@ export default function StudentDashboard() {
       )}
 
       {!loading && data && activeTab === 'profile' && (
-        <div className="card" style={{ maxWidth: '640px' }}>
-          <h3>Customize Pseudonymous Identity (FR-006)</h3>
-          <p className="card-subtitle">
-            Choose a calming pseudonym and avatar. Real names, emails, and student numbers are
-            blocked automatically to keep you anonymous.
-          </p>
+        <div className="two-col">
+          <div className="card">
+            <h3>Customize Pseudonymous Identity (FR-006)</h3>
+            <p className="card-subtitle">
+              Choose a calming pseudonym, avatar, and short anonymous bio. Real names, emails, and
+              student numbers are blocked automatically to keep you anonymous.
+            </p>
 
-          {profileStatus.text && (
-            <div className={`alert ${profileStatus.type === 'success' ? 'alert-success' : 'alert-error'}`}>
-              {profileStatus.text}
-            </div>
-          )}
-
-          <form onSubmit={handleSaveProfile}>
-            <FormInput
-              id="pseudonymHandle"
-              label="Pseudonym Handle"
-              value={pseudonymInput}
-              onChange={(e) => setPseudonymInput(e.target.value)}
-              hint="4-30 characters, starts with a letter, no email or numeric ID patterns."
-              required
-            />
-
-            <div className="form-group">
-              <span className="form-label">Avatar Icon</span>
-              <div className="avatar-grid">
-                {(data.availableAvatars || Object.keys(AVATAR_META)).map((code) => (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => setAvatarInput(code)}
-                    className={`avatar-option ${avatarInput === code ? 'selected' : ''}`}
-                  >
-                    <span style={{ fontSize: '1.35rem' }}>{AVATAR_META[code]?.icon || '🌿'}</span>
-                    <span>{AVATAR_META[code]?.label || code}</span>
-                  </button>
-                ))}
+            {profileStatus.text && (
+              <div className={`alert ${profileStatus.type === 'success' ? 'alert-success' : 'alert-error'}`}>
+                {profileStatus.text}
               </div>
-            </div>
+            )}
 
-            <div className="actions-row">
-              <button type="submit" className="btn btn-primary" disabled={savingProfile}>
-                {savingProfile ? 'Saving...' : 'Save Changes'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleRegenerate}
-                disabled={savingProfile}
-              >
-                Regenerate Random Handle
-              </button>
-            </div>
-          </form>
+            <form onSubmit={handleSaveProfile}>
+              <FormInput
+                id="pseudonymHandle"
+                label="Pseudonym Handle"
+                value={pseudonymInput}
+                onChange={(e) => setPseudonymInput(e.target.value)}
+                hint="4-30 characters, starts with a letter, no email or numeric ID patterns."
+                required
+              />
+
+              <div className="form-group">
+                <span className="form-label">Avatar Icon</span>
+                <div className="avatar-grid">
+                  {(data.availableAvatars || Object.keys(AVATAR_META)).map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => setAvatarInput(code)}
+                      className={`avatar-option ${avatarInput === code ? 'selected' : ''}`}
+                    >
+                      <span style={{ fontSize: '1.35rem' }}>{AVATAR_META[code]?.icon || '🌿'}</span>
+                      <span>{AVATAR_META[code]?.label || code}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="studentBio">
+                  Anonymous Bio / Status Note (Optional)
+                </label>
+                <textarea
+                  id="studentBio"
+                  rows={3}
+                  maxLength={200}
+                  className="form-textarea"
+                  value={bioInput}
+                  onChange={(e) => setBioInput(e.target.value)}
+                  placeholder="Share a brief encouraging note (no real names, emails, or ID numbers)..."
+                />
+                <div className="field-hint">{bioInput.length}/200 characters</div>
+              </div>
+
+              <div className="actions-row">
+                <button type="submit" className="btn btn-primary" disabled={savingProfile}>
+                  {savingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleRegenerate}
+                  disabled={savingProfile}
+                >
+                  Regenerate Random Handle
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <ChangePasswordCard />
         </div>
       )}
 
